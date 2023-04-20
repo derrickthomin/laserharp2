@@ -242,7 +242,7 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=1325.4285888671875,208.61904335021
 
 // Tracking Vars related to audio stuff
 int8_t    sound_idx        = 0;
-uint8_t   env_idx          = 0;
+// uint8_t   env_idx          = 0;
 int8_t    scale_idx        = 0;
 int8_t    octave_current   = 3; 
 int8_t    rev_lvl_idx      = 0;
@@ -307,7 +307,8 @@ void initAudio(void){
   mixerFXVerb.gain(3,0);
   mixerMaster.gain(2, 0.3);
   mixerMaster.gain(3, 0.1); // DJT - FREEVERB. Messs with me later.
-  mixerMaster.gain(0, 0.3);
+  mixerMaster.gain(0, 0.3); // Strings
+  mixerMaster.gain(1, 0.3); // Pad
   // freeverb1.roomsize(0.9);
   // freeverb1.damping(0.2);
 
@@ -486,14 +487,10 @@ void init_envelope(void)
         envelope[i] -> attack(attackParam);
       break;
 
-      case 1: // Drum sound
-        envelope[i] -> attack(attackParam);
-      break;
-
-      case 2: // Synth sound
-        envelope[i] -> attack(3000);
-        envelope[i] -> decay(3000);
-        envelope[i] -> release(3000);
+      case 1: // Synth sound
+        envelope_pad[i] -> attack(3000);
+        envelope_pad[i] -> decay(3000);
+        envelope_pad[i] -> release(3000);
       break;
     }
   }
@@ -502,7 +499,6 @@ void init_envelope(void)
 // Get the high and low values of theremin sensor to calibrate.
 void run_theremin_calibration(bool skipCalibration = false)
 {
-
   if (skipCalibration) return;
 
   // Show user what's going on

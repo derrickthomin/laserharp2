@@ -52,7 +52,10 @@ extern std::list<int> oct_btn_list;
 // Sensor Tracking
 extern bool   sensorStatePrev[16];
 extern bool   sensorStateCurrent[16];
-extern int    photoSensorRaw[16];
+extern int    photoSensorRaw[16]; 
+extern int    photoSensorMin[16];         
+extern int    photoSensorMax[16];         
+extern int    photoSensor_0_127[16];  // Raw value turned into midi val
 extern bool   newNotes[16];
 extern bool   offNotes[16] ;
 extern double sens_ontime[16];
@@ -71,9 +74,11 @@ bool pot_changed(void);
 void process_buttons (void);              // Check for new button vals, returns true if screen needs an update
 void check_buttons(void);
 void initInputs(void);
-bool checkAllInputs(void);
+bool checkAllInputs(bool skipCalibration);
 void inputSetup(void);
 void processInputs(void);
+void update_calibration(int idx, int newReading);  // Update min / max values in sensor array based on new data.
+int  normalize_0_127(int idx, int reading);
 
 void selectMuxPin(uint8_t pin);
 void z__printAllDebugData(void);

@@ -20,7 +20,7 @@
 
 #define NUM_STRINGS   14
 #define NUM_MUX_PINS  8
-#define SENSOR_THRESH 400    // Below this, count the laser as broken
+#define SENSOR_THRESH 60    // Below this, count the laser as broken
 
 // Laser Sensors (MUX)
 #define MUX_CONTROL_S0       28
@@ -28,8 +28,8 @@
 #define MUX_CONTROL_S2       30
 #define MUX_1_DATA_PIN       25               // Analog - 1st 8 Sensors
 #define MUX_2_DATA_PIN       24               // Analog - last 6 sensors, theremin mode sensor djt- maybe do thremin on another analog pin if avail..
-const uint8_t  muxDataPins[2]        = {MUX_1_DATA_PIN, MUX_2_DATA_PIN};
-const uint8_t  selectPins[3]         = {MUX_CONTROL_S0, MUX_CONTROL_S1, MUX_CONTROL_S2};
+const uint8_t                muxDataPins[2] = {MUX_1_DATA_PIN, MUX_2_DATA_PIN};
+const uint8_t                selectPins[3]  = {MUX_CONTROL_S0, MUX_CONTROL_S1, MUX_CONTROL_S2};
 
 // Encoder
 #define ENCODER_DT_PIN       2
@@ -40,7 +40,7 @@ Encoder encoder(ENCODER_DT_PIN,ENCODER_CLK_PIN);
 // Modulation Photoresistor
 #define MOD_PHOTORESISTOR_PIN 14
 
-// Pot 
+// Slide Pots 
 #define VOLUME_PIN         26  // Slider pot on the back
 #define FX_SLIDER_PIN      27  // Slider pot 2 on the back
 const uint8_t slidePotPins[2] = {VOLUME_PIN, FX_SLIDER_PIN};
@@ -53,20 +53,19 @@ int             pot_vol_prev = 0;
 const uint8_t   pot_thresh   = 2;      // How much does the pot analog value need to change to count
 float           velocity     = 1;
 
-// Debounce Settings
+// Debounce Settings - djt still need?
 const uint8_t   debounce_ms  = 10;
 const int       DEBUG_millisBetweenPrintout = 500;  // Print to serial this many MS
 int             DEBUG_nextMillis = 0;
-
-// Put them in lists
-// std::list<int> nav_btn_list      = {NAV_L, NAV_R, NAV_ENTER};
-// std::list<int> oct_btn_list      = {BTN_WC, BTN_OCTDOWN, BTN_OCTUP};
 
 // Sensor Tracking
 bool   sensorStatePrev[16] = {0};
 bool   sensorStateCurrent[16] = {0};
 int    photoSensorRaw[16] = {0};
-bool   newNotes[16] = {0};
+int    photoSensor_0_127[16] = {0}; 
+int    photoSensorMin[16] = {30};      
+int    photoSensorMax[16] = {900};     
+bool   newNotes[16] = {0};         
 bool   offNotes[16] = {0};
 double sens_ontime[16] = {0};
 double sens_st_time[16] = {0};
@@ -83,9 +82,9 @@ int     encoderCountPrev = 0;
 bool    encoderBtn = true;
 bool    encoderBtnPrev = true;
 
-
-// Main input checking function - get raw data
-bool    checkAllInputs(void){
+// Get Raw Data from Sensors / Sliders / Etc.
+// Also update min / max calibration numbers
+bool checkAllInputs(bool skipCalibration = false){
 
   // A - Reset values
   bool haveAnyChanged = false;
@@ -137,17 +136,15 @@ bool    checkAllInputs(void){
       // 2. - Now take new readings
       photoSensorRaw[idx]  = analogRead(muxDataPins[muxIdx]);
       
-      // 2.1 - Convert analog readings into ON and OFF
-      if (photoSensorRaw[idx] < SENSOR_THRESH){
-        sensorStateCurrent[idx] = true;
-      } else {
-        sensorStateCurrent[idx] = false;
-      }
-
-      // 2.5  Catch any new notes, update in-flight notes
+      if (!skipCalibration) update_calibration(idx, photoSensorRaw[idx]);
+      
+      // 2.1 - Normalize, then convert analog readings into ON and OFF
+      int normed = normalize_0_127(idx,photoSensorRaw[idx]);
+      sensorStateCurrent[idx] = (normed < SENSOR_THRESH) ? true : false;
+      photoSensor_0_127[idx] = normed;   
 
       // 2.51 - WAS = OFF and NOW = ON...   restart ontime counter. Play new notes, depending on playmode
-      if (sensorStateCurrent[idx] && !sensorStatePrev[idx])
+      if (sensorStateCurrent[idx] && !sensorStatePrev[idx] && idx < NUM_STRINGS)
       {
         sens_st_time[idx] = millis();
         switch(sound_idx)
@@ -157,6 +154,7 @@ bool    checkAllInputs(void){
 
           case 1:  // Synth Pad
             newNotes[idx] = true;
+            Serial.println("new synth note!!!!!!!!!!!!!!!!!!");
             break;
 
           default:
@@ -168,16 +166,18 @@ bool    checkAllInputs(void){
       if (sensorStateCurrent[idx] && sensorStatePrev[idx]) sens_ontime[idx] = (millis() - sens_st_time[idx]);
 
       // 2.53 - WAS = ON and NOW = OFF...   Play new notes, depending on playmode.
-      if (!sensorStateCurrent[idx] && sensorStatePrev[idx]) 
+      if (!sensorStateCurrent[idx] && sensorStatePrev[idx] && idx < NUM_STRINGS) 
       {
         switch(sound_idx)
         {
           case 0:  // Harp
+            Serial.println("NEW HARP NOTE YA BOOIDIDIDIIIDIDIIDIIDIDIIDIDIIDI");
             newNotes[idx] = true;
             break;
 
           case 1:  // Synth Pad
             offNotes[idx] = true;
+            Serial.println("new synth note!!!!! OFFFFFFFF");
             break;
             
           default:
@@ -268,6 +268,105 @@ void processInputs(void){
   }
 }
 
+// ----------------- Calibration ----------------- //
+
+
+void update_calibration(int idx, int newReading){
+  
+  // Update new min / max
+  if (newReading > photoSensorMax[idx]) photoSensorMax[idx] = newReading;
+  if (newReading < photoSensorMin[idx]) photoSensorMin[idx] = newReading;
+}
+
+// Return normalized value from 0-127... useful range for midi
+int  normalize_0_127(int idx, int reading){
+  return map(reading, photoSensorMin[idx], photoSensorMax[idx], 0, 127);
+}
+
+// Get the high and low values of each photoreistor to calibrate based on ambient light conditions.
+// void calibrate_sensors(bool skipCalibration = false)
+// {
+
+//   if (skipCalibration) return;
+
+//   // Show user what's going on
+//   display.clearDisplay();
+//   display.setCursor(0, 2);
+//   display.setTextSize(1);
+//   display.setTextColor(WHITE);
+//   display.setTextWrap(true);
+//   display.println("Running Theremin Calibration...");
+//   display.display();
+
+//   delay(1500);
+//   display.clearDisplay();
+//   display.setCursor(0, 2);
+//   display.println("Cover & uncover");
+//   display.println("sensor 8");
+//   display.println("when you see GO..");
+//   display.display();
+
+//   delay(3000);
+//   display.clearDisplay();
+//   display.setTextSize(2);
+//   display.setCursor(2,2);
+//   display.println("GO!");
+//   display.display();
+
+//   display.setTextSize(1);
+//   display.setCursor(20,20);
+//   display.println("MAX: ");
+//   display.setCursor(20,30);
+//   display.println("MIN: ");
+
+
+//   float calibration_timer = millis();
+//   float calibration_time = 5000;   
+//   therValMax = 0;
+//   therValMin = 5000;                    // Set to crazy values to ensure we update with sensor info.  
+
+//   // Find min and max
+//   while (millis() - calibration_timer < calibration_time)
+//   {
+//     int16_t cur_ther_val = analogRead(THEREMIN);
+//     if (cur_ther_val > therValMax) therValMax = cur_ther_val;     
+//     if (cur_ther_val < therValMin) therValMin = cur_ther_val;
+
+//     display.fillRect(70, 0, 100, 100, BLACK);
+//     display.setCursor(70, 20);
+//     display.println(therValMax);
+//     display.setCursor(70, 30);
+//     display.println(therValMin);
+//     display.display();
+//   }
+
+//   display.clearDisplay();
+//   display.setTextSize(1);
+//   display.setCursor(0,20);
+//   display.println("Calibration Complete");
+//   display.display();
+
+//   delay(2000);
+//   display.clearDisplay();
+//   display.drawRoundRect(0,0,SCREEN_WIDTH,16,10,WHITE);
+//   display.setTextSize(1);
+//   display.setTextColor(WHITE);
+//   display.setCursor(25, 5);
+//   display.println("Theremin Mode");
+
+//   ther_a = 1/((float)therValMax - (float)therValMin);
+//   ther_b = 1 - ther_a * therValMax;
+
+//   // DEBUG INFO
+//   // Serial.println("theremin calibration complete");
+//   // Serial.println("------------------------------");
+//   // Serial.println("Theremin Value Max:    ");
+//   // Serial.println(therValMax);
+//   // Serial.println("Theremin Value Min:    ");
+//   // Serial.println(therValMin);
+// }
+
+
 // ------------ Setup / Utility -------------- //
 
 // Pin numbers = 0 thru 7
@@ -312,6 +411,9 @@ void z__printAllDebugData(void){
   Serial.print("Sensors (raw):      ");
   z__printArrayToSerial(16, photoSensorRaw);
   Serial.println();
+  Serial.print("Sensors (normed):      ");
+  z__printArrayToSerial(16, photoSensor_0_127);
+  Serial.println();
   Serial.print("Sensors (on/off):   ");
   z__printArrayToSerial(16, sensorStateCurrent);
   Serial.println();
@@ -330,9 +432,9 @@ void z__printAllDebugData(void){
   Serial.print("Outer Menu?:        ");
   Serial.print(outer_menu);
   Serial.println();
-  Serial.print("Theremin Mode IDX:  ");
-  Serial.print(theremin_idx);
-  Serial.println();
+  // Serial.print("Theremin Mode IDX:  ");
+  // Serial.print(theremin_idx);
+  // Serial.println();
 
   Serial.println();
   Serial.print("Audio - Peak Readings:  ");

@@ -43,14 +43,11 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);
 void setup() {
 
   Serial.begin(115200);
-
-  // audio library init
   initAudio();
   initDisplay();                  
   inputSetup();
   MIDI.begin();
 
-  Serial.println("IN SETUP");
 }
 
 // //<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
@@ -64,22 +61,16 @@ void setup() {
 
 void loop() {
 
-  // Check buttons
-  // check_buttons();                  // Get updated button statuses
-  // process_buttons();                // Change values and stuff based on btns and screen. Set screen update flag.
-  // update_screen();                  // Update the screen based on what we are on, etc etc.
-  // update_volume();                  // Prob don't need to do this full speeed.. but will do so until it's a real problem
-
   // Only check every 10 ms or so
   if (millis() > next_reading)
   {
      next_reading = millis() + loop_delay;
-     checkAllInputs();                           // Get the current vals, and tell us if anything changed & reset prev values
+     checkAllInputs(false);                         // Set to true to turn off calibration
      processInputs();
 
     if (theremin_idx > 0) update_theremin_fx();     // Update params based on theremin if using theremin mode.
 
-    // Main Note Loop
+    // ----------------- Main Note Loop ----------------- //
     for (int idx = 0; idx < 14; idx++){
       // env_idx = idx + (sound_idx * 8);
       if (newNotes[idx])
@@ -94,7 +85,7 @@ void loop() {
             envelope[idx] -> noteOn();
             break;
 
-          case 2: // Synth sound
+          case 1: // Synth sound
             pad[idx] -> frequency(note);
             envelope_pad[idx] -> noteOn();
             break;
@@ -102,7 +93,6 @@ void loop() {
       } // Turn off the note
 
       else if (offNotes[idx])
-      
       {
         envelope_pad[idx] -> noteOff();
         envelope[idx] -> noteOff();

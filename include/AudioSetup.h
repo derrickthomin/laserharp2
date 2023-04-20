@@ -25,7 +25,7 @@
 // Tracking Globals            
 extern int8_t    scale_idx;   
 extern int8_t    sound_idx;
-extern uint8_t   env_idx; 
+// extern uint8_t   env_idx; 
 extern int8_t    octave_current;
 extern int8_t    rev_lvl_idx;     // Track reverb setting (Off, Lo, Med, Hi)
 extern int8_t    theremin_idx;
